@@ -1,0 +1,40 @@
+#!/bin/bash
+
+#syntax superscan 192.168.1.0/24
+
+# $1 is the ip range we will scan in cidr notation eg.. 192.168.1.0/24
+
+#scans the network specified and sends output to initialscan.txt
+sudo nmap -sS $1 > /tmp/initialscan.txt
+
+#remove the first line from initialscan.txt
+sed '1d' /tmp/initialscan.txt > /tmp/initialscan.txt.tmp && mv /tmp/initialscan.txt.tmp /tmp/initialscan.txt
+
+#awk to split the initialscan into sections
+# search for patten inside / / if the line is blank increment j j=how many blank lines
+# once a new line is found move on to the next target ip
+
+awk '/^$/{if (++j == 1) {i++; j=0}; next} {print > ("/tmp/ipfiles/trimmed" i ".txt")}' /tmp/initialscan.txt
+
+#rename the split up files from previous command to represent the target ip's
+for file in /tmp/ipfiles/*
+do
+fifth_word=$(head -n 1 "$file" | awk '{gsub(/[\(\)]/,"",$5); print $5}')
+mv "$file" "/tmp/ipfiles//$fifth_word"
+done
+
+#nmap each terget and the open ports if a target has no open ports its skipped
+for file in /tmp/ipfiles/*
+do
+if grep -q "All" "$file"; then
+continue
+else
+address=`awk '{print $5} ' $file | head -n 1`
+portmap=`cat $file | grep open | cut -f1 -d "/" | tr '\n' ',' |  sed 's/,$/\n/' `
+echo ""
+echo ""
+echo "scanning $address"
+echo "ports being scanned $portmap"
+nmap -A -Pn -T5 -p $portmap $address
+fi
+done
